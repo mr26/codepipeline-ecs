@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  containername:
+    Type: String
+    Description: Name of the containers being created
+    Default: flask-container1
+
+Resources:
+  cfecsbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: cfecsbucket
+  
+  cfecsiamrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cfecsiamrole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSCodeCommitFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+    
+
+  cfecspipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref cfecsbucket
+      Name: cfecspipeline
+      RoleArn: !GetAtt cfecsiamrole.Arn
+      Stages:
+        - 
+          Name: Source
+          Actions:
+            -
+              Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: CodeCommit
+              Configuration:
+                RepositoryName: flask-repo
+                BranchName: master
+              OutputArtifacts:
+                -
+                  Name: SourceOutputArtifact
+  
+        - 
+          Name: Build
+          Actions:
+            -
+              Name: BuildAction
+              InputArtifacts:
+               -
+                  Name: SourceOutputArtifact
+
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: flask-build
+              OutputArtifacts:
+                -
+                  Name: BuildOutputArtifact
+        -        
+          Name: Deploy
+          Actions:
+            - 
+              Name: DeployAction
+              InputArtifacts:
+                -
+                  Name: BuildOutputArtifact
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: ECS
+              Configuration: 
+                ClusterName: cfecscluster
+                ServiceName: cfecsservice         
+                FileName: 'imagedefinitions.json'
+

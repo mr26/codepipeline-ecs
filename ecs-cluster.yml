@@ -1,0 +1,91 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  containername:
+    Type: String
+    Description: Name of the containers being created
+    Default: flask-container1
+Resources:
+  cfecscluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: "cfecscluster"
+  ecstaskdefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - "FARGATE"
+      NetworkMode: awsvpc
+      ContainerDefinitions:
+      - Name: !Ref containername
+        Image: 313060132730.dkr.ecr.us-east-1.amazonaws.com/flask-repo:latest
+        PortMappings:
+          - ContainerPort: 80
+      Cpu: 256 
+      Memory: 512
+      ExecutionRoleArn: arn:aws:iam::313060132730:role/ecsTaskExecutionRole
+  ecselb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: true
+      Name: ecselb
+      Scheme: internet-facing
+      Subnets:
+        - subnet-23b9f369
+        - subnet-9860e1b6
+        - subnet-d47dc7b3
+        - subnet-5e76f102
+        - subnet-5099e55f
+        - subnet-f75799c9
+      Type: network
+  flasktargetgroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: flasktargetgroup
+      Port: 80
+      VpcId: vpc-fec81e84
+      Protocol: TCP
+      TargetType: ip
+    DependsOn: ecselb 
+  ecselblistener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ecselb
+      Port: 80
+      Protocol: TCP  
+      DefaultActions: 
+      - Type: forward
+        TargetGroupArn: !Ref flasktargetgroup
+
+  cfecsservice:
+    Type: AWS::ECS::Service
+    Properties: 
+      Cluster: !Ref cfecscluster
+      DesiredCount: 3
+      LaunchType: FARGATE
+      ServiceName: cfecsservice
+      LoadBalancers:
+        - ContainerName: !Ref containername
+          ContainerPort: 80
+          TargetGroupArn: !Ref flasktargetgroup
+      TaskDefinition: !Ref ecstaskdefinition
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - sg-066b3a583b1bb9687
+          Subnets:
+            - subnet-23b9f369
+            - subnet-9860e1b6
+            - subnet-d47dc7b3
+            - subnet-5e76f102
+            - subnet-5099e55f
+            - subnet-f75799c9
+  
+      
